@@ -1,0 +1,8 @@
+{
+  "name": "Collab Sphere",
+  "description": "A collaborative remote meeting application with real-time chat translation, screen sharing simulation, and comprehensive host controls, powered by Gemini.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
