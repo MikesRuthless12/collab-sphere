@@ -561,12 +561,14 @@ const MeetingRoom: React.FC<MeetingRoomProps> = ({ meetingId, userName, userId, 
                 audio: config.includeSystemAudio,
             });
         } else { // 'camera'
-            mediaStream = await navigator.mediaDevices.getUserMedia({
+            const constraints: MediaStreamConstraints = {
                 video: true,
                 audio: config.includeMic,
-            });
+            };
+            mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
         }
         
+        // Add microphone audio for screen recording if needed
         if (config.source === 'screen' && config.includeMic && !config.includeSystemAudio) {
             const voiceStream = await navigator.mediaDevices.getUserMedia({ audio: true });
             const audioTrack = voiceStream.getAudioTracks()[0];
@@ -580,18 +582,23 @@ const MeetingRoom: React.FC<MeetingRoomProps> = ({ meetingId, userName, userId, 
         recorder.ondataavailable = (event) => event.data.size > 0 && recordedChunksRef.current.push(event.data);
 
         recorder.onstop = () => {
-            const blob = new Blob(recordedChunksRef.current, { type: options.mimeType });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `collab-sphere-recording-${new Date().toISOString()}.${config.format.split('/')[1]}`;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-            document.body.removeChild(a);
-            recordedChunksRef.current = [];
-            setRecordingState(RecordingState.IDLE);
-            mediaStream.getTracks().forEach(track => track.stop());
+            try {
+                const blob = new Blob(recordedChunksRef.current, { type: options.mimeType });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `collab-sphere-recording-${new Date().toISOString()}.${config.format.split('/')[1]}`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                recordedChunksRef.current = [];
+            } catch (error) {
+                console.error('Error saving recording:', error);
+            } finally {
+                setRecordingState(RecordingState.IDLE);
+                mediaStream.getTracks().forEach(track => track.stop());
+            }
         };
         
         mediaStream.getVideoTracks()[0].onended = () => mediaRecorderRef.current?.state === 'recording' && mediaRecorderRef.current.stop();

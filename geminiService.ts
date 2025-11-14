@@ -1,70 +1,71 @@
-import { GoogleGenAI } from "@google/genai";
+// Get API key from Vite environment variables
+const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || '';
 
-// Assume API_KEY is set in the environment variables
-const API_KEY = process.env.API_KEY;
-
-if (!API_KEY) {
-  console.warn("Gemini API key not found. AI services will not work.");
+if (!GEMINI_API_KEY) {
+  console.warn('⚠️ GEMINI_API_KEY not found. Translation and grammar features will be disabled.');
 }
 
-const ai = API_KEY ? new GoogleGenAI({ apiKey: API_KEY }) : null;
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent';
 
-export const translateText = async (text: string, targetLanguageName: string): Promise<string> => {
-  if (!API_KEY) {
-    return `(Translation disabled) ${text}`;
+async function callGeminiAPI(prompt: string): Promise<string> {
+  if (!GEMINI_API_KEY) {
+    console.error('Gemini API key is not configured');
+    return prompt; // Return original text if API key is missing
   }
 
   try {
-    const prompt = `Translate the following text to ${targetLanguageName}. Only return the translated text, with no extra formatting or explanations: "${text}"`;
-    
-    const response = await ai!.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
+    const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              {
+                text: prompt,
+              },
+            ],
+          },
+        ],
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 1024,
+        },
+      }),
     });
 
-    return response.text.trim();
+    if (!response.ok) {
+      throw new Error(`Gemini API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    return text.trim();
   } catch (error) {
-    console.error('Error translating text:', error);
-    return `(Translation failed) ${text}`;
+    console.error('Error calling Gemini API:', error);
+    return prompt; // Return original text on error
   }
-};
+}
 
-export const correctGrammar = async (text: string): Promise<string> => {
-    if (!API_KEY) {
-        return text;
-    }
+export async function translateText(text: string, targetLanguage: string): Promise<string> {
+  if (!text.trim()) return text;
+  
+  const prompt = `Translate the following text to ${targetLanguage}. Only provide the translation, no explanations:\n\n${text}`;
+  return await callGeminiAPI(prompt);
+}
 
-    try {
-        const prompt = `Correct the spelling and grammar of the following text. Only return the corrected text, without any introductory phrases like "Here is the corrected text:":\n\n"${text}"`;
-        
-        const response = await ai!.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: prompt,
-        });
+export async function correctGrammar(text: string): Promise<string> {
+  if (!text.trim()) return text;
+  
+  const prompt = `Correct any grammar and spelling mistakes in the following text. Only provide the corrected text, no explanations:\n\n${text}`;
+  return await callGeminiAPI(prompt);
+}
 
-        return response.text.trim().replace(/^"|"$/g, ''); // Also remove quotes if Gemini adds them
-    } catch (error) {
-        console.error('Error correcting grammar:', error);
-        return text; // Return original text on failure
-    }
-};
-
-export const filterProfanity = async (text: string): Promise<string> => {
-    if (!API_KEY) {
-        return text;
-    }
-
-    try {
-        const prompt = `Review the following text for any profane or inappropriate words. Replace every letter of each profane word with an asterisk (*). Return only the modified text. If no profane words are found, return the original text exactly as it is.\n\nOriginal text: "${text}"`;
-        
-        const response = await ai!.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: prompt,
-        });
-
-        return response.text.trim();
-    } catch (error) {
-        console.error('Error filtering profanity:', error);
-        return text; // Return original text on failure
-    }
-};
+export async function filterProfanity(text: string): Promise<string> {
+  if (!text.trim()) return text;
+  
+  const prompt = `Replace any profanity or inappropriate words in the following text with asterisks (***). Keep all other words unchanged. Only provide the filtered text:\n\n${text}`;
+  return await callGeminiAPI(prompt);
+}
